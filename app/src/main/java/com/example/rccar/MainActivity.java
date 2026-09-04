@@ -113,40 +113,103 @@ public class MainActivity extends Activity {
 
     new Thread(() -> {
         BluetoothSocket s = null;
+        String lastError = "";
 
         try {
-            // Stop Bluetooth discovery before attempting the connection
             try {
                 adapter.cancelDiscovery();
             } catch (SecurityException ignored) {
             }
 
-            // First try the normal secure RFCOMM connection
+            // -------------------------------------------------
+            // 1. Try normal secure SPP
+            // -------------------------------------------------
             try {
                 s = device.createRfcommSocketToServiceRecord(SPP_UUID);
                 s.connect();
 
-            } catch (Exception secureError) {
+            } catch (Exception e1) {
+                lastError = "Secure: " + e1.getClass().getSimpleName();
 
-                // Secure connection failed.
-                // Try an insecure RFCOMM connection, which is commonly
-                // needed with HC-05 modules.
                 try {
-                    if (s != null) {
-                        s.close();
-                    }
+                    if (s != null) s.close();
                 } catch (Exception ignored) {
                 }
 
-                s = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
-                s.connect();
+                s = null;
+
+                // -------------------------------------------------
+                // 2. Try insecure SPP
+                // -------------------------------------------------
+                try {
+                    s = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+                    s.connect();
+
+                } catch (Exception e2) {
+                    lastError = "Insecure: " + e2.getClass().getSimpleName();
+
+                    try {
+                        if (s != null) s.close();
+                    } catch (Exception ignored) {
+                    }
+
+                    s = null;
+
+                    // -------------------------------------------------
+                    // 3. HC-05 direct RFCOMM channel fallback
+                    // -------------------------------------------------
+                    boolean connected = false;
+
+                    for (int channel = 1; channel <= 3; channel++) {
+                        try {
+                            java.lang.reflect.Method method =
+                                    device.getClass().getMethod(
+                                            "createRfcommSocket",
+                                            int.class
+                                    );
+
+                            s = (BluetoothSocket) method.invoke(
+                                    device,
+                                    channel
+                            );
+
+                            s.connect();
+
+                            connected = true;
+                            break;
+
+                        } catch (Exception channelError) {
+                            lastError =
+                                    "Channel " + channel + ": " +
+                                    channelError.getClass().getSimpleName();
+
+                            try {
+                                if (s != null) s.close();
+                            } catch (Exception ignored) {
+                            }
+
+                            s = null;
+                        }
+                    }
+
+                    if (!connected) {
+                        throw new IOException(
+                                "All Bluetooth connection methods failed. " +
+                                lastError
+                        );
+                    }
+                }
             }
 
+            // -------------------------------------------------
+            // Connection succeeded
+            // -------------------------------------------------
             socket = s;
             in = s.getInputStream();
             out = s.getOutputStream();
 
             String name;
+
             try {
                 name = device.getName();
             } catch (SecurityException e) {
@@ -157,8 +220,11 @@ public class MainActivity extends Activity {
                     name == null ? "HC-05" : name;
 
             mainHandler.post(() ->
-                    callJs("onAndroidConnected(" +
-                            jsQuote(deviceName) + ")")
+                    callJs(
+                            "onAndroidConnected(" +
+                            jsQuote(deviceName) +
+                            ")"
+                    )
             );
 
             startReader();
@@ -174,8 +240,14 @@ public class MainActivity extends Activity {
 
             closeSocket();
 
+            final String errorMessage =
+                    e.getClass().getSimpleName() +
+                    (e.getMessage() != null
+                            ? ": " + e.getMessage()
+                            : "");
+
             mainHandler.post(() -> {
-                toast("Could not connect to HC-05.");
+                toast("HC-05 error: " + errorMessage);
                 setDisconnectedJs();
             });
         }
