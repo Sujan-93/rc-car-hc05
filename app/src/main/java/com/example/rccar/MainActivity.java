@@ -107,34 +107,80 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void connectTo(BluetoothDevice device) {
-        closeSocket();
-        mainHandler.post(() -> callJs("setStatus('connecting')"));
+   private void connectTo(BluetoothDevice device) {
+    closeSocket();
+    mainHandler.post(() -> callJs("setStatus('connecting')"));
 
-        new Thread(() -> {
+    new Thread(() -> {
+        BluetoothSocket s = null;
+
+        try {
+            // Stop Bluetooth discovery before attempting the connection
             try {
-                BluetoothSocket s = device.createRfcommSocketToServiceRecord(SPP_UUID);
-                s.connect();
-                socket = s;
-                in = s.getInputStream();
-                out = s.getOutputStream();
-
-                String name;
-                try { name = device.getName(); } catch (SecurityException e) { name = "HC-05"; }
-                final String deviceName = name == null ? "HC-05" : name;
-
-                mainHandler.post(() -> callJs("onAndroidConnected(" + jsQuote(deviceName) + ")"));
-                startReader();
-            } catch (Exception e) {
-                closeSocket();
-                mainHandler.post(() -> {
-                    toast("Could not connect. Make sure HC-05 is paired.");
-                    setDisconnectedJs();
-                });
+                adapter.cancelDiscovery();
+            } catch (SecurityException ignored) {
             }
-        }).start();
-    }
 
+            // First try the normal secure RFCOMM connection
+            try {
+                s = device.createRfcommSocketToServiceRecord(SPP_UUID);
+                s.connect();
+
+            } catch (Exception secureError) {
+
+                // Secure connection failed.
+                // Try an insecure RFCOMM connection, which is commonly
+                // needed with HC-05 modules.
+                try {
+                    if (s != null) {
+                        s.close();
+                    }
+                } catch (Exception ignored) {
+                }
+
+                s = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+                s.connect();
+            }
+
+            socket = s;
+            in = s.getInputStream();
+            out = s.getOutputStream();
+
+            String name;
+            try {
+                name = device.getName();
+            } catch (SecurityException e) {
+                name = "HC-05";
+            }
+
+            final String deviceName =
+                    name == null ? "HC-05" : name;
+
+            mainHandler.post(() ->
+                    callJs("onAndroidConnected(" +
+                            jsQuote(deviceName) + ")")
+            );
+
+            startReader();
+
+        } catch (Exception e) {
+
+            try {
+                if (s != null) {
+                    s.close();
+                }
+            } catch (Exception ignored) {
+            }
+
+            closeSocket();
+
+            mainHandler.post(() -> {
+                toast("Could not connect to HC-05.");
+                setDisconnectedJs();
+            });
+        }
+    }).start();
+}
     private void startReader() {
         readerThread = new Thread(() -> {
             byte[] buffer = new byte[256];
