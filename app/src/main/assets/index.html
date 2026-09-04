@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0c12">
+<title>RC Car Controller</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+  :root {
+    --bg:      #0a0c12;
+    --panel:   #11141e;
+    --card:    #181c28;
+    --border:  #232840;
+    --blue:    #4f7cff;
+    --blueD:   #2952d9;
+    --green:   #22d67a;
+    --greenD:  #15a358;
+    --red:     #ff4f6a;
+    --amber:   #ffb830;
+    --purple:  #b060ff;
+    --purpleD: #7c2fd9;
+    --text:    #e8ecf8;
+    --muted:   #4a5270;
+    --sub:     #6b7599;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* ── Layout ── */
+  #app {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 12px 14px 18px;
+    gap: 10px;
+  }
+
+  /* ── Header ── */
+  #header {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .brand { display: flex; flex-direction: column; gap: 1px; }
+  .brand-title { color: var(--text); font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+  .brand-sub   { color: var(--muted); font-size: 10px; letter-spacing: 0.3px; }
+
+  #status-area { display: flex; align-items: center; gap: 8px; }
+
+  #obs-badge {
+    background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 800; letter-spacing: 1px;
+    padding: 3px 8px; border-radius: 99px;
+    display: none;
+    animation: blink 0.5s ease-in-out infinite alternate;
+  }
+  #obs-badge.show { display: block; }
+
+  #dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted); transition: all 0.3s;
+  }
+  #dot.connected   { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  #dot.connecting  { background: var(--amber); animation: blink 0.6s infinite alternate; }
+
+  #status-label { color: var(--muted); font-size: 11px; font-weight: 600; }
+
+  /* ── Connect button ── */
+  #connect-btn {
+    width: 100%; height: 46px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, var(--blue), var(--blueD));
+    color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px #4f7cff33;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  #connect-btn.connected {
+    background: linear-gradient(135deg, #1a2035, #1e2845);
+    color: var(--red); box-shadow: 0 0 0 1px var(--border);
+  }
+  #connect-btn:active { transform: scale(0.97); }
+
+  /* ── Mode toggle ── */
+  #mode-toggle {
+    width: 100%; height: 42px;
+    background: var(--card); border-radius: 14px;
+    border: 1px solid var(--border);
+    display: flex; padding: 4px; gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .mode-btn {
+    flex: 1; border-radius: 10px; border: none;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    background: transparent; color: var(--muted);
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .mode-btn.active-bt {
+    background: var(--blue); color: #fff;
+    box-shadow: 0 2px 12px #4f7cff44;
+  }
+  .mode-btn.active-auto {
+    background: var(--purple); color: #fff;
+    box-shadow: 0 2px 12px #b060ff44;
+  }
+  .mode-btn:active { transform: scale(0.96); }
+
+  /* ── Joystick area ── */
+  #joystick-area {
+    flex: 1; width: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px;
+  }
+
+  #cmd-pill {
+    height: 28px; padding: 0 16px;
+    border-radius: 99px; border: 1px solid var(--border);
+    background: var(--card);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    transition: all 0.12s;
+    min-width: 130px;
+  }
+  #cmd-pill.active { border-color: var(--cmd-color, var(--blue)); box-shadow: 0 0 12px var(--cmd-color, var(--blue))44; color: var(--cmd-color, var(--blue)); }
+
+  #joystick-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  #joystick-base {
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%, #1c2238, #0d1018);
+    border: 2px solid var(--border);
+    position: relative;
+    box-shadow: 0 8px 40px #0008, inset 0 1px 0 #ffffff0a;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    touch-action: none;
+  }
+
+  .crosshair {
+    position: absolute; top: 50%; left: 50%;
+    background: #ffffff06; pointer-events: none;
+    transform-origin: center;
+  }
+
+  .ring-mark {
+    position: absolute;
+    color: #ffffff14; font-size: 11px;
+    pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+  }
+
+  #knob {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%, #2a3050, #0d1018);
+    border: 2px solid var(--border);
+    box-shadow: 0 4px 20px #0006, inset 0 1px 0 #ffffff14;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; cursor: grab;
+    transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+  }
+
+  #knob-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #ffffff18;
+    transition: all 0.1s;
+  }
+
+  /* ── Speed control ── */
+  #speed-panel {
+    width: 100%; background: var(--card);
+    border-radius: 14px; border: 1px solid var(--border);
+    padding: 12px 14px;
+    flex-shrink: 0;
+  }
+
+  #speed-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  #speed-label { color: var(--muted); font-size: 10px; letter-spacing: 1px; }
+  #speed-val   { color: var(--amber); font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #speed-val span { font-size: 11px; font-weight: 500; }
+
+  #speed-bars { display: flex; gap: 4px; align-items: flex-end; }
+  .speed-bar {
+    flex: 1; border-radius: 4px; background: #1a2030;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .speed-bar.lit {
+    background: linear-gradient(to top, var(--amber), #fde68a);
+    box-shadow: 0 0 6px #ffb83055;
+  }
+  .speed-bar:active { transform: scaleY(0.92); }
+
+  /* ── Auto mode panel ── */
+  #auto-panel {
+    width: 100%; background: var(--card);
+    border-radius: 14px;
+    border: 1px solid #b060ff33;
+    box-shadow: 0 0 24px #b060ff14;
+    padding: 14px;
+    display: none; flex-direction: column; gap: 12px;
+    flex-shrink: 0;
+  }
+  #auto-panel.show { display: flex; }
+
+  #auto-header { display: flex; align-items: center; gap: 8px; }
+  #auto-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--purple); box-shadow: 0 0 8px var(--purple);
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  #auto-title { color: var(--purple); font-weight: 700; font-size: 13px; }
+
+  #dist-header { display: flex; justify-content: space-between; align-items: baseline; }
+  #dist-label  { color: var(--muted); font-size: 10px; letter-spacing: 1px; }
+  #dist-val    { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--green); transition: color 0.3s; }
+  #dist-val span { font-size: 11px; font-weight: 500; }
+
+  #dist-bar-wrap { height: 8px; border-radius: 99px; background: #111520; overflow: hidden; }
+  #dist-bar { height: 100%; border-radius: 99px; width: 100%; background: var(--green); transition: width 0.3s, background 0.3s; }
+
+  #dist-status { color: var(--muted); font-size: 10px; text-align: right; }
+  #auto-hint   { color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  /* ── Animations ── */
+  @keyframes blink { from { opacity:1 } to { opacity:0.3 } }
+  @keyframes spin   { to { transform: rotate(360deg) } }
+  .spinning { display: inline-block; animation: spin 0.7s linear infinite; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <div class="brand">
+      <div class="brand-title">🚗 RC Car</div>
+      <div class="brand-sub">Arduino · HC-05 Classic Bluetooth · 9600 baud</div>
+    </div>
+    <div id="status-area">
+      <div id="obs-badge">⚠ OBSTACLE</div>
+      <div id="dot"></div>
+      <div id="status-label">Off</div>
+    </div>
+  </div>
+
+  <!-- Connect -->
+  <button id="connect-btn" onclick="toggleConnect()">⚡ Connect via Bluetooth</button>
+
+  <!-- Mode toggle -->
+  <div id="mode-toggle">
+    <button class="mode-btn active-bt" id="btn-bt"   onclick="setMode('BT')">🎮 Bluetooth</button>
+    <button class="mode-btn"           id="btn-auto" onclick="setMode('AUTO')">🤖 Auto Drive</button>
+  </div>
+
+  <!-- Joystick -->
+  <div id="joystick-area">
+    <div id="cmd-pill">● STOP</div>
+    <div id="joystick-wrap">
+      <div id="joystick-base">
+        <div class="crosshair" id="ch-h"></div>
+        <div class="crosshair" id="ch-v"></div>
+        <div class="ring-mark" id="rm-up">▲</div>
+        <div class="ring-mark" id="rm-dn">▼</div>
+        <div class="ring-mark" id="rm-lt">◀</div>
+        <div class="ring-mark" id="rm-rt">▶</div>
+        <div id="knob"><div id="knob-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Speed -->
+  <div id="speed-panel">
+    <div id="speed-header">
+      <span id="speed-label">SPEED</span>
+      <span id="speed-val">55<span>%</span></span>
+    </div>
+    <div id="speed-bars"></div>
+  </div>
+
+  <!-- Auto panel -->
+  <div id="auto-panel">
+    <div id="auto-header">
+      <div id="auto-dot"></div>
+      <div id="auto-title">Auto Drive Active</div>
+    </div>
+    <div>
+      <div id="dist-header">
+        <span id="dist-label">DISTANCE</span>
+        <span id="dist-val">—<span> cm</span></span>
+      </div>
+      <div style="margin-top:6px">
+        <div id="dist-bar-wrap"><div id="dist-bar"></div></div>
+      </div>
+      <div id="dist-status" style="margin-top:4px">Waiting for sensor…</div>
+    </div>
+    <div id="auto-hint">Car navigates on its own. Tap <b style="color:var(--text)">Bluetooth</b> above to take control.</div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const BT_SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
+const BT_CHAR    = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let btChar      = null;
+let btDevice    = null;
+let connected   = false;
+let mode        = 'BT';
+let speed       = 5;
+let lastCmd     = 'S';
+let obsTimer    = null;
+let hbInterval  = null;
+
+// ── Bluetooth Classic (HC-05) ─────────────────────────────────────────────────
+async function toggleConnect() {
+  if (connected) { disconnect(); return; }
+  if (!window.AndroidBluetooth) {
+    alert('Open this page inside the RC Car HC-05 Android app.');
+    return;
+  }
+  setStatus('connecting');
+  try { AndroidBluetooth.connect(); }
+  catch(e) { console.error(e); setStatus('disconnected'); }
+}
+
+function onAndroidConnected(name) {
+  connected = true;
+  setStatus('connected');
+  document.getElementById('connect-btn').textContent = '✕  Disconnect';
+  document.getElementById('connect-btn').classList.add('connected');
+  applyMode(mode);
+}
+
+function onAndroidDisconnected() {
+  connected = false;
+  setStatus('disconnected');
+  document.getElementById('connect-btn').textContent = '⚡ Connect via Bluetooth';
+  document.getElementById('connect-btn').classList.remove('connected');
+}
+
+function disconnect() {
+  if (window.AndroidBluetooth) AndroidBluetooth.disconnect();
+  onAndroidDisconnected();
+}
+
+// Called by Android when HC-05 sends a line.
+function onBtData(txt) {
+  txt = String(txt || '').trim();
+  if (!txt) return;
+  if (txt.includes('OBS')) showObstacle();
+  if (txt.startsWith('DIST:')) updateDistance(parseInt(txt.slice(5)));
+  if (txt === 'MODE:A') applyMode('AUTO');
+  if (txt === 'MODE:B') applyMode('BT');
+}
+
+function send(cmd) {
+  if (!connected || !window.AndroidBluetooth) return;
+  AndroidBluetooth.send(String(cmd));
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function setStatus(s) {
+  const dot   = document.getElementById('dot');
+  const label = document.getElementById('status-label');
+  dot.className = s;
+  label.textContent = { disconnected:'Off', connecting:'Connecting…', connected:'On' }[s];
+  label.style.color = { disconnected:'var(--muted)', connecting:'var(--amber)', connected:'var(--green)' }[s];
+}
+
+function showObstacle() {
+  const b = document.getElementById('obs-badge');
+  b.classList.add('show');
+  clearTimeout(obsTimer);
+  obsTimer = setTimeout(() => b.classList.remove('show'), 2000);
+}
+
+// ── Mode ──────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  if (!connected) return;
+  send(m === 'AUTO' ? 'M' : 'N');
+  applyMode(m);
+}
+
+function applyMode(m) {
+  mode = m;
+  const btnBt   = document.getElementById('btn-bt');
+  const btnAuto = document.getElementById('btn-auto');
+  const joystick = document.getElementById('joystick-area');
+  const speedP   = document.getElementById('speed-panel');
+  const autoP    = document.getElementById('auto-panel');
+
+  btnBt.className   = 'mode-btn' + (m === 'BT'   ? ' active-bt'   : '');
+  btnAuto.className = 'mode-btn' + (m === 'AUTO'  ? ' active-auto' : '');
+
+  if (m === 'AUTO') {
+    joystick.style.display = 'none';
+    speedP.style.display   = 'none';
+    autoP.classList.add('show');
+  } else {
+    joystick.style.display = 'flex';
+    speedP.style.display   = 'block';
+    autoP.classList.remove('show');
+  }
+}
+
+// ── Distance meter ────────────────────────────────────────────────────────────
+function updateDistance(d) {
+  const val    = document.getElementById('dist-val');
+  const bar    = document.getElementById('dist-bar');
+  const status = document.getElementById('dist-status');
+  const pct    = Math.min(100, (d / 100) * 100);
+  const color  = d <= 12 ? 'var(--red)' : d <= 30 ? 'var(--amber)' : 'var(--green)';
+  val.childNodes[0].textContent = d === 999 ? '—' : d;
+  val.style.color  = color;
+  bar.style.width  = pct + '%';
+  bar.style.background = color;
+  bar.style.boxShadow  = `0 0 8px ${color.replace('var(--','').replace(')','')}44`;
+  status.textContent   = d <= 12 ? '⚠ Too close — avoiding' : d <= 30 ? '⚡ Obstacle nearby' : 'Clear path';
+  status.style.color   = d <= 12 ? 'var(--red)' : d <= 30 ? 'var(--amber)' : 'var(--muted)';
+}
+
+// ── Speed bars ────────────────────────────────────────────────────────────────
+(function buildSpeedBars() {
+  const wrap = document.getElementById('speed-bars');
+  for (let i = 1; i <= 9; i++) {
+    const b = document.createElement('div');
+    b.className  = 'speed-bar' + (i <= speed ? ' lit' : '');
+    b.style.height = (8 + i * 3.5) + 'px';
+    b.addEventListener('click', () => {
+      speed = i;
+      document.getElementById('speed-val').childNodes[0].textContent = Math.round(i / 9 * 100);
+      document.querySelectorAll('.speed-bar').forEach((el, idx) => {
+        el.classList.toggle('lit', idx < i);
+      });
+      send(String(i));
+    });
+    wrap.appendChild(b);
+  }
+})();
+
+// ── Joystick ──────────────────────────────────────────────────────────────────
+(function initJoystick() {
+  const base    = document.getElementById('joystick-base');
+  const knob    = document.getElementById('knob');
+  const knobDot = document.getElementById('knob-dot');
+  const pill    = document.getElementById('cmd-pill');
+  const chH     = document.getElementById('ch-h');
+  const chV     = document.getElementById('ch-v');
+
+  // Size the joystick to fit screen
+  const vw     = window.innerWidth;
+  const BR     = Math.min(110, vw * 0.29);   // base radius
+  const KR     = Math.round(BR * 0.35);       // knob radius
+  const DEAD   = Math.round(BR * 0.18);
+  const MAX    = BR - KR - 6;
+  const D      = BR * 2;
+
+  base.style.width  = D + 'px';
+  base.style.height = D + 'px';
+  knob.style.width  = KR * 2 + 'px';
+  knob.style.height = KR * 2 + 'px';
+  knob.style.left   = (BR - KR) + 'px';
+  knob.style.top    = (BR - KR) + 'px';
+
+  // Crosshairs
+  chH.style.cssText = `width:${D - 28}px;height:1px;margin-left:${-(D-28)/2}px;margin-top:-0.5px;`;
+  chV.style.cssText = `width:1px;height:${D - 28}px;margin-top:${-(D-28)/2}px;margin-left:-0.5px;transform:rotate(90deg);`;
+
+  // Ring marks
+  const marks = [
+    ['rm-up', BR - 18, 6],
+    ['rm-dn', BR - 18, D - 24],
+    ['rm-lt', 6,       BR - 9],
+    ['rm-rt', D - 20,  BR - 9],
+  ];
+  marks.forEach(([id, l, t]) => {
+    const el = document.getElementById(id);
+    el.style.left = l + 'px'; el.style.top = t + 'px';
+  });
+
+  const COLORS = { F:'#22d67a', B:'#ff4f6a', L:'#4f7cff', R:'#4f7cff', S:'' };
+  const LABELS = { F:'▲ FORWARD', B:'▼ BACK', L:'◀ LEFT', R:'RIGHT ▶', S:'● STOP' };
+
+  let active = false;
+  let sendInterval = null;
+  let curCmd = 'S';
+  let kx = 0, ky = 0;
+
+  function getCmd(dx, dy) {
+    const d = Math.sqrt(dx*dx + dy*dy);
+    if (d < DEAD) return 'S';
+    const a = Math.atan2(-dy, dx) * 180 / Math.PI;
+    if (a >= 45  && a < 135)  return 'F';
+    if (a >= -135 && a < -45) return 'B';
+    if (a >= 135 || a < -135) return 'L';
+    return 'R';
+  }
+
+  function applyKnob(dx, dy) {
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > MAX) { dx = dx/dist*MAX; dy = dy/dist*MAX; }
+    kx = dx; ky = dy;
+    knob.style.left = (BR + dx - KR) + 'px';
+    knob.style.top  = (BR + dy - KR) + 'px';
+    knob.style.transition = 'none';
+
+    const cmd   = getCmd(dx, dy);
+    const color = COLORS[cmd] || 'var(--muted)';
+    curCmd = cmd;
+
+    // Update knob glow
+    knob.style.borderColor = cmd === 'S' ? 'var(--border)' : color;
+    knob.style.boxShadow   = cmd === 'S' ? '' : `0 0 18px ${color}88, inset 0 1px 0 #ffffff14`;
+    knobDot.style.background   = cmd === 'S' ? '#ffffff18' : color;
+    knobDot.style.boxShadow    = cmd === 'S' ? '' : `0 0 8px ${color}`;
+    base.style.borderColor = cmd === 'S' ? 'var(--border)' : color;
+    base.style.boxShadow   = cmd === 'S' ? '' : `0 0 28px ${color}33, 0 8px 40px #0008`;
+
+    // Pill
+    pill.textContent = LABELS[cmd];
+    pill.style.setProperty('--cmd-color', color);
+    pill.className   = cmd === 'S' ? 'cmd-pill' : 'cmd-pill active';
+
+    // Knob bg tint
+    knob.style.background = cmd === 'F'
+      ? 'radial-gradient(circle at 38% 32%, #1a3a28, #0d1018)'
+      : cmd === 'B'
+      ? 'radial-gradient(circle at 38% 32%, #3a1a20, #0d1018)'
+      : cmd !== 'S'
+      ? 'radial-gradient(circle at 38% 32%, #1a2840, #0d1018)'
+      : 'radial-gradient(circle at 38% 32%, #2a3050, #0d1018)';
+  }
+
+  function snapBack() {
+    knob.style.transition = 'left 0.22s cubic-bezier(.34,1.56,.64,1), top 0.22s cubic-bezier(.34,1.56,.64,1)';
+    knob.style.left = (BR - KR) + 'px';
+    knob.style.top  = (BR - KR) + 'px';
+    knob.style.borderColor = 'var(--border)';
+    knob.style.boxShadow   = '';
+    knob.style.background  = 'radial-gradient(circle at 38% 32%, #2a3050, #0d1018)';
+    knobDot.style.background = '#ffffff18';
+    knobDot.style.boxShadow  = '';
+    base.style.borderColor   = 'var(--border)';
+    base.style.boxShadow     = '';
+    pill.textContent = '● STOP';
+    pill.className   = 'cmd-pill';
+  }
+
+  function getCenter() {
+    const r = base.getBoundingClientRect();
+    return { cx: r.left + BR, cy: r.top + BR };
+  }
+
+  function startDrag(clientX, clientY) {
+    if (mode !== 'BT' || !connected) return;
+    active = true;
+    const { cx, cy } = getCenter();
+    applyKnob(clientX - cx, clientY - cy);
+    clearInterval(sendInterval);
+    sendInterval = setInterval(() => { if (curCmd) send(curCmd); }, 80);
+  }
+
+  function moveDrag(clientX, clientY) {
+    if (!active) return;
+    const { cx, cy } = getCenter();
+    applyKnob(clientX - cx, clientY - cy);
+  }
+
+  function endDrag() {
+    if (!active) return;
+    active = false;
+    clearInterval(sendInterval);
+    send('S');
+    snapBack();
+    curCmd = 'S';
+  }
+
+  // Touch
+  base.addEventListener('touchstart', e => { e.preventDefault(); const t=e.touches[0]; startDrag(t.clientX,t.clientY); }, { passive:false });
+  base.addEventListener('touchmove',  e => { e.preventDefault(); const t=e.touches[0]; moveDrag(t.clientX,t.clientY);  }, { passive:false });
+  base.addEventListener('touchend',   e => { e.preventDefault(); endDrag(); }, { passive:false });
+  base.addEventListener('touchcancel',e => { e.preventDefault(); endDrag(); }, { passive:false });
+
+  // Mouse (desktop fallback)
+  base.addEventListener('mousedown', e => startDrag(e.clientX, e.clientY));
+  window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+  window.addEventListener('mouseup', endDrag);
+})();
+</script>
+</body>
+</html>
